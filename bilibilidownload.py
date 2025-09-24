@@ -3,6 +3,7 @@ import config
 from pyquery import PyQuery as pq
 import re
 from collections import defaultdict
+import json
 
 class BilibiliDownload:
     # 类初始化，定义相关属性
@@ -69,6 +70,7 @@ class BilibiliDownload:
                 bv_dict.update({result[1][0]:result[0]})
         return bv_dict
     # 将字典保存在json文件里面
+
 if __name__=="__main__":
     bilibili_down=BilibiliDownload()
     print(bilibili_down.search_video_for_key())
