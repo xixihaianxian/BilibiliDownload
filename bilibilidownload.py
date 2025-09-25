@@ -178,10 +178,44 @@ class BilibiliDownload:
     def __init__(self,bv_number:str):
         # 定义属相
         self.bv_number=bv_number
+        self.aid_cid_api="https://api.bilibili.com/x/web-interface/view"
+        self.download_url="https://api.bilibili.com/x/player/playurl"
+        self.headers=config.HEADERS
+        # 设置代理
+        self.proxies = {
+            "http": "http://127.0.0.1:7890",  # HTTP 代理
+            "https": "http://127.0.0.1:7890",  # HTTPS 代理
+        }
     # 通过BV号获取aid、cid
-    def get_aid_cid(self,bvid):
-        pass
+    def get_aid_cid(self):
+        # 使用session保留请求信息
+        self.session=requests.Session()
+        params={
+            "bvid":self.bv_number,
+        }
+        # 向api发送请求，获取aid，cid
+        try:
+            logger.info(f"正在获取aid,cid💪!")
+            response=self.session.get(url=self.aid_cid_api,params=params,headers=self.headers,proxies=self.proxies)
+            logger.info(f"获取到与aid，cid相关的json")
+        except Exception as error:
+            logger.error(f"请求api失败😭！")
+            raise requests.RequestException("向api发送请求失败😭！")
+        # 若请求成功，处理相关的json，从而获取aid，cid
+        aid_cid_json=response.json()
+        state_code=aid_cid_json.get("code")
+        # 判断返回的内容是否有问题
+        if state_code!=0:
+            logger.error(f"请求的内容是无效的❌！")
+            raise ValueError(f"返回的json内容是无效的！")
+        else:
+            # 获取aid
+            aid=aid_cid_json.get("data").get("aid")
+            # 获取cid
+            cid=aid_cid_json.get("data").get("cid")
+            # 获取title
+            title=aid_cid_json.get("data").get("title")
+            print()
 if __name__=="__main__":
-    bilibili_down=FetchBV()
-    data=bilibili_down.search_video_use_api()
-    bilibili_down.write_for_json_api(data)
+    bilibili_download=BilibiliDownload(bv_number="BV13PJCzuEvh")
+    bilibili_download.get_aid_cid()
