@@ -4,32 +4,36 @@ from pyquery import PyQuery as pq
 import re
 from collections import defaultdict
 import json
-from typing import Dict
+from typing import Dict,Any,List
 from loguru import logger
 import os
 import time
 
-class BilibiliDownload:
+# 获取BV号的类
+class FetchBV:
     # 类初始化，定义相关属性
     def __init__(self,search_key:str="原神"):
         self.search_name=search_key
         self.search_url="https://search.bilibili.com/all"
-        self.search_api="https://api.bilibili.com/x/web-interface/wbi/search/all/v2"
-        # __refresh__=true
-        # _extra=""
-        # context=""
-        # page=1
-        # page_size=50
-        # keyword=%E5%8E%9F%E7%A5%9E
+        self.search_api="https://api.bilibili.com/x/web-interface/search/type"
+        # keyword=原神
+        # search_type=video
+        # page
+        # order
         self.header=config.HEADERS
         # 设置代理
         self.proxies = {
             "http": "http://127.0.0.1:7890",  # HTTP 代理
             "https": "http://127.0.0.1:7890",  # HTTPS 代理
         }
+        # 存储通过目录的名称
         self.bv_dir="BV"
+        # 存储
+        self.api_dir="API"
         # 生成存放bv文件的目录
         os.path.exists(self.bv_dir) or os.makedirs(self.bv_dir)
+        # 生成存放api返回json文件的目录
+        os.path.exists(self.api_dir) or os.makedirs(self.api_dir)
     # 列表判断是否为空
     def is_empty(self,target:list):
         if len(target)==0:
@@ -69,26 +73,36 @@ class BilibiliDownload:
                 url = url + "&" + suffix
         return url
     # 使用api来搜索
-    def search_video_use_api(self,page:int=1,pagesize:int=50):
+    def search_video_use_api(self,page:int=1):
         # 提前定义好video_of_json
-        video_of_json=None
+        videos_of_json=None
         self.page=page
         # api的参数
         params={
-            "__refresh__":"true",
-            "_extra":"",
-            "context":"",
-            "page":1,
-            "page_size":pagesize,
             "keyword":"原神",
+            "search_type":"video",# 必填参数
+            "page":page, # 非必填参数
+            "order":"default" # 排列方式
         }
-        response = requests.get(url=self.search_api, params=params, headers=self.header, proxies=self.proxies)
+        try:
+            # 尝试向api发送请求
+            logger.info(f"尝试向哔哩哔哩api发送请求😘！")
+            response = requests.get(url=self.search_api, params=params, headers=self.header, proxies=self.proxies)
+            # 发送请求成功
+            logger.info(f"请求api成功😘！")
+        except Exception as error:
+            # 发送请求失败
+            logger.error(f"请求api失败😓！")
+            # 501代表系统失败
+            if requests.status_codes==501:
+                raise requests.RequestException(f"系统错误😫！")
+            # 其它错误
+            else:
+                raise requests.RequestException(f"请求失败😫！")
         data=response.json()
-        # 获取json主要部分
-        for part in data.get("data").get("result"):
-            if part.get("result_type")=="activity":
-                video_of_json=part.get("data")
-        return video_of_json
+        # 获取json目标部分
+        videos_of_json=data.get("data").get("result")
+        return videos_of_json
     # 搜索，根据关键字搜索相关的内容
     def search_video_for_key(self,page:int=1,pagesize:int=30):
         self.page=page
@@ -129,7 +143,45 @@ class BilibiliDownload:
             json_path=os.path.join(self.bv_dir,f"{self.page}.json")
         with open(json_path,"w",encoding="utf-8") as file:
             file.write(json.dumps(data,indent=2,ensure_ascii=False))
+    # api获取的json，处理和写入方式
+    def write_for_json_api(self,data:List[Dict[str,Any]],json_path:str=None):
+        # 定义存放数据的列表
+        video_datas=list()
+        # 判断json_path是否为空
+        if json_path is None:
+            json_path=os.path.join(self.api_dir,f"{self.page}.json")
+        # 处理api获取的json数据
+        logger.info(f"正在处理获取的json数据🥳！")
+        for video_json in data:
+            video_datas.append({
+                "type":video_json.get("type"), # 文件类型
+                "author":video_json.get("author"), # 作者
+                "typename":video_json.get("typename"), # 类型
+                "url":video_json.get("arcurl"), # url
+                "bvid":video_json.get("bvid"), # 视频BV号
+                "title":video_json.get("title"), # 视频标题
+                "description":video_json.get("description"), # 视频简介，详细内容
+                "tag":video_json.get("tag"), # 作品标签
+                "duration":video_json.get("duration"), # 视频持续时间
+            })
+        # 将修改之后的json写入
+        try:
+            logger.info(f"正在向文件写入数据😘！")
+            with open(json_path,"w",encoding="utf-8") as file:
+                file.write(json.dumps(video_datas,ensure_ascii=False,indent=2))
+            logger.info(f"写入成功💕！")
+        except Exception as error:
+            logger.error(f"写入失败😅！")
+            raise Exception("写入文件失败！")
+# 下载哔哩哔哩视频
+class BilibiliDownload:
+    def __init__(self,bv_number:str):
+        # 定义属相
+        self.bv_number=bv_number
+    # 通过BV号获取aid、cid
+    def get_aid_cid(self,bvid):
+        pass
 if __name__=="__main__":
-    bilibili_down=BilibiliDownload()
+    bilibili_down=FetchBV()
     data=bilibili_down.search_video_use_api()
-    bilibili_down.write_for_json(data)
+    bilibili_down.write_for_json_api(data)
