@@ -21,7 +21,7 @@ class FetchBV:
         # page
         # order
         self.header=config.HEADERS
-        # 设置代理
+        # 设置代理，如果没有代理可以设制为None
         self.proxies = {
             "http": "http://127.0.0.1:7890",  # HTTP 代理
             "https": "http://127.0.0.1:7890",  # HTTPS 代理
@@ -94,7 +94,7 @@ class FetchBV:
             # 发送请求失败
             logger.error(f"请求api失败😓！")
             # 501代表系统失败
-            if requests.status_codes==501:
+            if requests.status_codes==-501:
                 raise requests.RequestException(f"系统错误😫！")
             # 其它错误
             else:
@@ -186,8 +186,13 @@ class BilibiliDownload:
             "http": "http://127.0.0.1:7890",  # HTTP 代理
             "https": "http://127.0.0.1:7890",  # HTTPS 代理
         }
+        # 创建存放从bv那获取的信息的目录
+        self.video_information_dir="information"
+        os.path.exists(self.video_information_dir) or os.makedirs(self.video_information_dir)
     # 通过BV号获取aid、cid
     def get_aid_cid(self):
+        # 定义存放数据的字典
+        data=defaultdict(None)
         # 使用session保留请求信息
         self.session=requests.Session()
         params={
@@ -210,12 +215,62 @@ class BilibiliDownload:
             raise ValueError(f"返回的json内容是无效的！")
         else:
             # 获取aid
-            aid=aid_cid_json.get("data").get("aid")
+            data.update({"aid":aid_cid_json.get("data").get("aid")})
             # 获取cid
-            cid=aid_cid_json.get("data").get("cid")
+            data.update({"cid":aid_cid_json.get("data").get("cid")})
             # 获取title
-            title=aid_cid_json.get("data").get("title")
-            print()
+            data.update({"title":aid_cid_json.get("data").get("title")})
+            # 获取视频详情
+            data.update({"desc":aid_cid_json.get("data").get("desc")})
+        file_name=os.path.join(self.video_information_dir,f"{data.get('title')}.json")
+        # 将数据写入文件
+        try:
+            with open(file_name,"w",encoding="utf-8") as file:
+                file.write(json.dumps(data,indent=2,ensure_ascii=False))
+        except OSError as error:
+            # 文件名格式错误的报错
+            logger.warning(f"{data.get('title')}.json,文件名格式错误❌！")
+            # 使用时间戳来定义文件名
+            timestamp=time.strftime("%Y%m%d%H%M%S", time.localtime())
+            file_name=os.path.join(self.video_information_dir,f"{timestamp}.json")
+            with open(file_name,"w",encoding="utf-8") as file:
+                file.write(json.dumps(data,indent=2,ensure_ascii=False))
+        except Exception as error:
+            logger.error(f"文件写入出现错误💔！")
+            raise Exception("文件写入错误！")
+        return data
+    # 获取真实的下载链接
+    def get_download_url(self,aid: int, cid: int, quality: int = 0):
+        # 定义参数
+        params={
+            "avid":aid,
+            "cid":cid,
+            "qn":quality,
+        }
+        self.headers.update({"Referer": "https://www.bilibili.com"})
+        logger.info(f"正在向bilibili请求视频💪！")
+        response=requests.get(url=self.download_url,params=params,proxies=self.proxies,headers=self.headers)
+        state_code=response.json().get("code")
+        if state_code==-400:
+            logger.error(f"请求失败💔！")
+            raise requests.RequestException(f"请求失败😭！")
+        elif state_code==-404:
+            logger.error(f"没有这个视频🤔！")
+            raise requests.RequestException(f"没有这个视频🤔！")
+        durl=response.json().get("data").get("durl")[0].get("url")
+        return durl
+    # 下载视频
+    def download_video(self,url: str, file_name: str, save_dir: str = "./downloads"):
+        os.makedirs(save_dir, exist_ok=True)
+        file_path = os.path.join(save_dir, file_name)
+        with requests.get(url, stream=True,proxies=self.proxies,headers=self.headers) as r:
+            r.raise_for_status()
+            with open(file_path, "wb") as f:
+                for chunk in r.iter_content(chunk_size=1024*256):
+                    f.write(chunk)
+        print(f"下载完成: {file_path}")
 if __name__=="__main__":
-    bilibili_download=BilibiliDownload(bv_number="BV13PJCzuEvh")
-    bilibili_download.get_aid_cid()
+    bilibili_download=BilibiliDownload(bv_number="BV1jhJCzSEa7")
+    data=bilibili_download.get_aid_cid()
+    url=bilibili_download.get_download_url(aid=data.get("aid"),cid=data.get("cid"))
+    bilibili_download.download_video(url=url,file_name="1.mp4")
