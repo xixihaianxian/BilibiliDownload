@@ -8,6 +8,9 @@ from typing import Dict,Any,List
 from loguru import logger
 import os
 import time
+from urllib3.util.retry import Retry
+from requests.adapters import HTTPAdapter
+from tqdm import tqdm
 
 # 获取BV号的类
 class FetchBV:
@@ -175,20 +178,39 @@ class FetchBV:
             raise Exception("写入文件失败！")
 # 下载哔哩哔哩视频
 class BilibiliDownload:
-    def __init__(self,bv_number:str):
+    def __init__(self,bv_number:str,max_retries:int=3):
         # 定义属相
         self.bv_number=bv_number
         self.aid_cid_api="https://api.bilibili.com/x/web-interface/view"
         self.download_url="https://api.bilibili.com/x/player/playurl"
         self.headers=config.HEADERS
-        # 设置代理
+        # 设置代理，如果代理设置为None
         self.proxies = {
             "http": "http://127.0.0.1:7890",  # HTTP 代理
             "https": "http://127.0.0.1:7890",  # HTTPS 代理
         }
+        # self.proxies=None
         # 创建存放从bv那获取的信息的目录
         self.video_information_dir="information"
         os.path.exists(self.video_information_dir) or os.makedirs(self.video_information_dir)
+        # 创建视频存放的目录
+        self.video_dir = "downloads"
+        os.path.exists(self.video_dir) or os.makedirs(self.video_dir)
+        # 重试次数
+        self.max_retries=max_retries
+        # 设置重试机制
+        self.retries=Retry(
+            total=max_retries, # 设置重试次数
+            backoff_factor=1, # 重试间隔
+            status_forcelist=[500, 502, 503, 504], # 遇见这些状态码的时候重试
+            allowed_methods=["GET"] # 允许重试的请求方式
+        )
+    # 将协议和适配器绑定
+    def bind_session(self):
+        session=requests.Session()
+        session.mount(prefix="http://",adapter=HTTPAdapter(max_retries=self.retries))
+        session.mount(prefix="https://",adapter=HTTPAdapter(max_retries=self.retries))
+        return session
     # 通过BV号获取aid、cid
     def get_aid_cid(self):
         # 定义存放数据的字典
@@ -227,6 +249,8 @@ class BilibiliDownload:
         try:
             with open(file_name,"w",encoding="utf-8") as file:
                 file.write(json.dumps(data,indent=2,ensure_ascii=False))
+            logger.info(f"视频的相关信息已经成功写入json文件👍！")
+            self.title=data.get("title")
         except OSError as error:
             # 文件名格式错误的报错
             logger.warning(f"{data.get('title')}.json,文件名格式错误❌！")
@@ -235,6 +259,8 @@ class BilibiliDownload:
             file_name=os.path.join(self.video_information_dir,f"{timestamp}.json")
             with open(file_name,"w",encoding="utf-8") as file:
                 file.write(json.dumps(data,indent=2,ensure_ascii=False))
+            logger.info(f"视频的相关信息已经成功写入json文件👍！")
+            self.title=timestamp
         except Exception as error:
             logger.error(f"文件写入出现错误💔！")
             raise Exception("文件写入错误！")
@@ -260,15 +286,41 @@ class BilibiliDownload:
         durl=response.json().get("data").get("durl")[0].get("url")
         return durl
     # 下载视频
-    def download_video(self,url: str, file_name: str, save_dir: str = "./downloads"):
+    def download_video(self,url: str=None, file_name: str=None, save_dir: str = "./downloads"):
         os.makedirs(save_dir, exist_ok=True)
-        file_path = os.path.join(save_dir, file_name)
-        with requests.get(url, stream=True,proxies=self.proxies,headers=self.headers) as r:
-            r.raise_for_status()
-            with open(file_path, "wb") as f:
-                for chunk in r.iter_content(chunk_size=1024*256):
-                    f.write(chunk)
-        print(f"下载完成: {file_path}")
+        # 判断file_name是否为None，如果不是None直接创建文件路径
+        if file_name is not None:
+            file_path = os.path.join(save_dir, file_name)
+        # 如果None，则
+        else:
+            file_name = self.title
+            file_path=os.path.join(save_dir,f"{file_name}.mp4")
+        # 定义计数器
+        attempt=0
+        # 获取session
+        session=self.bind_session()
+        while attempt<self.max_retries:
+            try:
+                with session.get(url=url,stream=True,headers=self.headers,proxies=self.proxies) as response:
+                    # 验证状态码，如果状态不符合要求就会自动报错！
+                    response.raise_for_status()
+                    # 获取视频的大小
+                    video_size=int(response.headers.get("Content-Length"))
+                    with open(file_path,"wb") as file,tqdm(
+                        total=video_size, # 设置总长度
+                        uint="B",
+                        unit_divisor=1024,
+                        unit_scale=True
+                    ) as bar: # 下载进度条
+                        for chunk in response.iter_content(chunk_size=1024):
+                            if chunk:
+                                file.write(chunk)
+                                bar.update(1024)
+                logger.info(f"download successful👌!Please check {file_path}")
+            except requests.exceptions.RequestException as error:
+                attempt+=1
+                logger.warning(f"下载错误，尝试第{attempt}/{self.max_retries}次下载♻️！")
+        raise Exception(f"多次下载失败，结束下载😡！")
 if __name__=="__main__":
     bilibili_download=BilibiliDownload(bv_number="BV1jhJCzSEa7")
     data=bilibili_download.get_aid_cid()
