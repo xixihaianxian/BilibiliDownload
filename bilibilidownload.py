@@ -1,3 +1,4 @@
+import argparse
 import requests
 import config
 from pyquery import PyQuery as pq
@@ -76,7 +77,7 @@ class FetchBV:
                 url = url + "&" + suffix
         return url
     # 使用api来搜索
-    def search_video_use_api(self,page:int=1):
+    def search_video_use_api(self,page:int=1,order:str="default"):
         # 提前定义好video_of_json
         videos_of_json=None
         self.page=page
@@ -85,7 +86,7 @@ class FetchBV:
             "keyword":"原神",
             "search_type":"video",# 必填参数
             "page":page, # 非必填参数
-            "order":"default" # 排列方式
+            "order":order # 排列方式
         }
         try:
             # 尝试向api发送请求
@@ -287,6 +288,12 @@ class BilibiliDownload:
         return durl
     # 下载视频
     def download_video(self,url: str=None, file_name: str=None, save_dir: str = "./downloads"):
+        r"""
+        :param url: 视频的真实URL
+        :param file_name: 视频下载存放的文件名！！（文件名是要开后缀！！！！👀）
+        :param save_dir: 视频存放的目录！
+        :return: None
+        """
         os.makedirs(save_dir, exist_ok=True)
         # 判断file_name是否为None，如果不是None直接创建文件路径
         if file_name is not None:
@@ -308,7 +315,7 @@ class BilibiliDownload:
                     video_size=int(response.headers.get("Content-Length"))
                     with open(file_path,"wb") as file,tqdm(
                         total=video_size, # 设置总长度
-                        uint="B",
+                        unit="B",
                         unit_divisor=1024,
                         unit_scale=True
                     ) as bar: # 下载进度条
@@ -317,10 +324,42 @@ class BilibiliDownload:
                                 file.write(chunk)
                                 bar.update(1024)
                 logger.info(f"download successful👌!Please check {file_path}")
+                exit(0) # 正常退出
             except requests.exceptions.RequestException as error:
                 attempt+=1
                 logger.warning(f"下载错误，尝试第{attempt}/{self.max_retries}次下载♻️！")
         raise Exception(f"多次下载失败，结束下载😡！")
+# 设置指令
+def main():
+    parser=argparse.ArgumentParser(description=f"Fetch Bilibili video😍!")
+    # 是否获取BV号
+    parser.add_argument("--fetchBV","-fb",dest="fetch_bv",action="store_ture",help="determine whether to obtain the BV number")
+    # 关键字填写
+    parser.add_argument("--key","-k",dest="key",default="原神",help="search keyword",type=str)
+    # 获取BV号的方式
+    parser.add_argument("--method","-m",dest="method",choices=["search","api"],help="ways to obtain a BV number",type=str)
+    # 页码
+    parser.add_argument("--page","-p",dest="page",default=1,type=int,help="page number")
+    # 修改排列方式
+    parser.add_argument("--order","-o",type=str,default="default",help="sorting method",dest="order")
+    # 是否需要保存
+    parser.add_argument("--save","-s",dest="save",choices=[True,False],default=False,type=bool,help="Do you need to save the obtained JSON?")
+    # 存放json文件的文件名
+    parser.add_argument("--filename","-fn",default=None,type=str,dest="filename",help="The filename for saving the JSON file")
+    # 输入BV号
+    parser.add_argument("--BV","-bv",dest="bv",type=str,help="BV number")
+    # 最大尝试次数
+    parser.add_argument("--maxretries","-mt",type=int,default=3,dest="max_retries",help="Maximum number of attempts")
+    # aid号
+    parser.add_argument("--aid","-a",type=int,dest="aid",help="aid number")
+    # cid号
+    parser.add_argument("--cid","-c",type=int,dest="cid",help="cid number")
+    # 清晰度
+    parser.add_argument("--quality","-q",type=int,default=0,dest="quality",help="quality")
+    # 存放视频的目录
+    parser.add_argument("--savedir","-sd",type=str,default="./downloads",dest="savedir",help="Directory for storing videos")
+    # 存放视频的文件名称
+    parser.add_argument("--videoname","-vn",dest="videoname",type="str",default=None,help="The file name for storing videos")
 if __name__=="__main__":
     bilibili_download=BilibiliDownload(bv_number="BV1jhJCzSEa7")
     data=bilibili_download.get_aid_cid()

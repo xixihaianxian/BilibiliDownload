@@ -17,3 +17,16 @@ QUALITY = {
     125: "HDR 真彩色",
 }
 
+SORT_FIELDS = ["default", "pubdate", "senddate", "id", "ranklevel", "click", "scores", "damku", "stow"]
+
+SORT_LIST = [
+    ("default", "综合排序"),
+    ("pubdate", "按发布日期倒序排序"),
+    ("senddate", "按修改日期倒序排序"),
+    ("id", "按投稿ID倒序排序"),
+    ("ranklevel", "按相关度排序"),
+    ("click", "按点击从高至低排序"),
+    ("scores", "按评论数从高至低排序"),
+    ("damku", "按弹幕数从高至低排序"),
+    ("stow", "按收藏数从高至低排序")
+]
