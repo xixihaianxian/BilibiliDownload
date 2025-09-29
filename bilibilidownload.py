@@ -333,14 +333,14 @@ class BilibiliDownload:
 def main():
     parser=argparse.ArgumentParser(description=f"Fetch Bilibili video😍!")
     # 是否获取BV号
-    parser.add_argument("--fetchBV","-fb",dest="fetch_bv",action="store_ture",help="determine whether to obtain the BV number")
+    parser.add_argument("--fetchBV","-fb",dest="fetch_bv",action="store_true",help="determine whether to obtain the BV number")
     # 关键字填写
     parser.add_argument("--key","-k",dest="key",default="原神",help="search keyword",type=str)
     # 获取BV号的方式
     parser.add_argument("--method","-m",dest="method",choices=["search","api"],help="ways to obtain a BV number",type=str)
     # 页码
     parser.add_argument("--page","-p",dest="page",default=1,type=int,help="page number")
-    # 修改排列方式
+    # 修改排列方式，详细参考config文件
     parser.add_argument("--order","-o",type=str,default="default",help="sorting method",dest="order")
     # 是否需要保存
     parser.add_argument("--save","-s",dest="save",choices=[True,False],default=False,type=bool,help="Do you need to save the obtained JSON?")
@@ -359,9 +359,29 @@ def main():
     # 存放视频的目录
     parser.add_argument("--savedir","-sd",type=str,default="./downloads",dest="savedir",help="Directory for storing videos")
     # 存放视频的文件名称
-    parser.add_argument("--videoname","-vn",dest="videoname",type="str",default=None,help="The file name for storing videos")
+    parser.add_argument("--videoname","-vn",dest="videoname",type=str,default=None,help="The file name for storing videos")
+    args = parser.parse_args()
+    # 建立指令逻辑
+    if args.fetch_bv: # 判断是否要提前获取BV号
+        # 构建获取BV号的实例
+        fetchBV=FetchBV(search_key=args.key)
+        # 判断搜索BV号的方式
+        if args.method == "search": # 使用search的方式获取BV号
+            pass
+        else:
+            videos_of_json=fetchBV.search_video_use_api(page=args.page,order=args.order) # 使用api的方式获取BV号
+            if args.save: # 判断是否将获取的json数据写入文件
+                fetchBV.write_for_json_api(data=videos_of_json,json_path=args.filename) # 写入文件
+            else:
+                logger.info(json.dumps(videos_of_json,indent=2,ensure_ascii=False)) # 如果不写入文件的话，就直接打印出来
+    else: # 直接可以根据BV号来获取视频文件
+        # 构建视频下载实例
+        bilibili_download=BilibiliDownload(bv_number=args.bv,max_retries=args.max_retries)
+        # 获取aid，cid号
+        data=bilibili_download.get_aid_cid()
+        # 根据获取的aid，cid号来获取视频真实的url
+        durl=bilibili_download.get_download_url(aid=data.get("aid"),cid=data.get("cid"),quality=args.quality)
+        # 保存视频
+        bilibili_download.download_video(url=durl,file_name=args.videoname,save_dir=args.savedir)
 if __name__=="__main__":
-    bilibili_download=BilibiliDownload(bv_number="BV1jhJCzSEa7")
-    data=bilibili_download.get_aid_cid()
-    url=bilibili_download.get_download_url(aid=data.get("aid"),cid=data.get("cid"))
-    bilibili_download.download_video(url=url,file_name="1.mp4")
+    main()
