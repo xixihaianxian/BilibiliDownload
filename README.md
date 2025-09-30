@@ -180,13 +180,9 @@ python bilibilidownload.py -bv "BV1xxx" -q 64
 
 ---
 
----
-
 ## 🙅‍♀️代码缺陷
 
 - ❌目前还是无法直接通过网页获取的方式来获取BV码
-
----
 
 ---
 
